@@ -429,3 +429,9 @@ input[type=text],input[type=search],textarea,select{width:100%;border:1px solid 
 .pinyin-fb{color:#b42318}
 body.hide-pinyin .pinyin{display:none}
 .topbar .actions{gap:8px}
+
+/* Formulario de frase */
+.modal-back{position:fixed;inset:0;background:#0006;z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:14px;overflow:auto}
+.modal-card{background:#fff;border-radius:16px;padding:16px;width:100%;max-width:560px;margin:auto}
+.modal-card details summary{cursor:pointer}
+.modal-card .chips .chip{font-size:16px;padding:5px 10px}

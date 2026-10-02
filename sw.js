@@ -1,4 +1,4 @@
-const CACHE="chino-personal-v1";
+const CACHE="chino-personal-v2";
 const ASSETS=["./","./index.html","./style.css","./app.js","./manifest.json","./config.js","./icon.svg"];
 
 self.addEventListener("install",event=>{

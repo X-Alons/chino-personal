@@ -10,7 +10,7 @@ const SYNC_CONFIG_KEY="chino-personal-sync-config";
 const SYNC_STATE_KEY="chino-personal-sync-state";
 const SYNC_DEVICE_KEY="chino-personal-sync-device-id";
 const TODAY_EVENTS_KEY="chino-today-events";
-const APP_VERSION="v1.0";
+const APP_VERSION="v1.1";
 let syncConfig=null;
 let syncClient=null;
 let syncUser=null;
@@ -46,6 +46,45 @@ function chineseErrors(x,raw){
  const exp=normPinyin(x.pinyin);
  if(!exp)return editDistance(hanziChars(x.zh),Array.from(raw));
  return editDistance(Array.from(exp),Array.from(normPinyin(raw)));
+}
+const TONE_DEFAULTS={t1:"-",t2:"/",t3:"^",t4:"\\",u:":"};
+function getToneSymbols(){try{return {...TONE_DEFAULTS,...JSON.parse(localStorage.getItem("chino-tone-symbols")||"{}")}}catch(e){return {...TONE_DEFAULTS}}}
+function saveToneSymbols(o){try{localStorage.setItem("chino-tone-symbols",JSON.stringify(o))}catch(e){}}
+function escRe(v){return String(v).replace(/[.*+?^${}()|[\]\\\/-]/g,"\\$&")}
+// Reglas del pinyin: la marca va en a/e; en "ou" en la o; si no, en la última vocal.
+function placeTone(w,t){
+ let idx=-1;
+ if(/[ae]/.test(w))idx=w.search(/[ae]/);
+ else if(w.includes("ou"))idx=w.indexOf("o");
+ else for(let i=w.length-1;i>=0;i--){if("aeiouü".includes(w[i])){idx=i;break}}
+ return idx<0?null:w.slice(0,idx)+TONE_MAP[w[idx]][t-1]+w.slice(idx+1);
+}
+// a1 / a- → ā · a2 / a/ → á · a3 / a^ → ǎ · a4 / a\ → à · u: / v → ü · hao3 → hǎo
+function convertPinyinLive(text){
+ const sy=getToneSymbols();
+ let out=String(text??"").normalize("NFC").replace(/[vV]/g,m=>m==="v"?"ü":"Ü");
+ if(sy.u)out=out.replace(new RegExp("([uU])"+escRe(sy.u),"g"),(m,u)=>u==="u"?"ü":"Ü");
+ const map={"1":1,"2":2,"3":3,"4":4,"5":5};
+ [1,2,3,4].forEach(n=>{if(sy["t"+n])map[sy["t"+n]]=n});
+ const keys=Object.keys(map).sort((a,b)=>b.length-a.length).map(escRe).join("|");
+ return out.replace(new RegExp("([a-zA-ZüÜ]+)("+keys+")","g"),(m,syl,k)=>{
+  const t=map[k],low=syl.toLowerCase();
+  if(t===5)return syl;
+  const r=placeTone(low,t); if(!r)return m;
+  return syl[0]!==low[0]?r[0].toUpperCase()+r.slice(1):r;
+ });
+}
+function pinyinLiveInput(el){
+ const pos=el.selectionStart??el.value.length;
+ const before=convertPinyinLive(el.value.slice(0,pos));
+ const all=convertPinyinLive(el.value);
+ if(all!==el.value){el.value=all;try{el.setSelectionRange(before.length,before.length)}catch(e){}}
+}
+function insertPinyinChar(ch){
+ const el=document.getElementById("pf-py"); if(!el)return;
+ const a=el.selectionStart??el.value.length,b=el.selectionEnd??a;
+ el.value=el.value.slice(0,a)+ch+el.value.slice(b);
+ el.focus(); el.setSelectionRange(a+ch.length,a+ch.length);
 }
 function togglePinyin(){
  const h=document.body.classList.toggle("hide-pinyin");
@@ -967,7 +1006,7 @@ function renderSession(){
  ${currentLevel
    ? `${currentLevel}${currentPart!==null?` · Parte ${currentPart}`:""}`
    : "Repaso general"
- } · ${arr.length} frases · v1.0
+ } · ${arr.length} frases · v1.1
 </div>   </div>
   </div>
   <div class="card study-intro">
@@ -1105,24 +1144,58 @@ function renderLibrary(){
    <div class="phrase-list">${arr.map(phraseRow).join("")||'<div class="empty">No se encontraron frases.</div>'}</div>
   </section>`;
 }
-function askPhraseFields(x){
- const es=prompt("Español:",x?.es||""); if(es===null||!es.trim())return null;
- const zh=prompt("Chino (hanzi):",x?.zh||""); if(zh===null||!zh.trim())return null;
- const pinyin=prompt("Pinyin (con tonos: nǐ hǎo · o con números: ni3 hao3):",x?.pinyin||""); if(pinyin===null)return null;
- const lv=(prompt("Nivel (HSK1, HSK2, HSK3, HSK4, HSK5, HSK6):",x?.level||"HSK1")||"HSK1").toUpperCase().replace(/\s+/g,"");
- const part=Math.min(4,Math.max(1,Number(prompt("Parte (1, 2, 3 o 4):",String(x?.part||1)))||1));
- const tags=(prompt("Etiquetas, separadas por comas:",(x?.tags||[]).join(", "))||"").split(",").map(t=>t.trim()).filter(Boolean);
- return {es:es.trim(),zh:zh.trim(),pinyin:numberedToMarked(pinyin.trim()),level:levels.includes(lv)?lv:(x?.level||"HSK1"),part,tags};
+let phraseFormId=null;
+function closePhraseForm(){document.getElementById("phraseModal")?.remove()}
+function addPhrase(){openPhraseForm(null)}
+function editPhrase(id){openPhraseForm(id)}
+function openPhraseForm(id){
+ const x=id==null?null:data.find(a=>String(a.id)===String(id));
+ if(id!=null&&!x)return;
+ phraseFormId=x?x.id:null; closePhraseForm();
+ const sy=getToneSymbols(), v=(k,d="")=>escapeHtml(x?.[k]??d);
+ const keys="aeiou".split("").map(c=>TONE_MAP[c].slice(0,4)).join("")+TONE_MAP["ü"];
+ const keyBtns=Array.from(keys).map(ch=>`<button type="button" class="chip" onclick="insertPinyinChar('${ch}')">${ch}</button>`).join("");
+ const m=document.createElement("div"); m.id="phraseModal"; m.className="modal-back";
+ m.innerHTML=`<div class="modal-card">
+  <h3 style="margin:0 0 10px">${x?"✏️ Editar frase":"➕ Nueva frase"}</h3>
+  <label class="field-label">Español</label><input type="text" id="pf-es" value="${v("es")}" autocomplete="off">
+  <label class="field-label">Chino (hanzi)</label><input type="text" id="pf-zh" value="${v("zh")}" autocomplete="off" lang="zh-CN">
+  <label class="field-label">Pinyin <span class="muted small">· escribe con atajos y se convierte solo</span></label>
+  <input type="text" id="pf-py" value="${v("pinyin")}" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="if(!event.isComposing)pinyinLiveInput(this)" placeholder="ni3 hao3  ·  ni^ hao^  ·  nu:3">
+  <div class="muted small" style="margin-top:6px">Atajos: <b>a1</b> o <b>a${escapeHtml(sy.t1)}</b> → ā · <b>a2</b> o <b>a${escapeHtml(sy.t2)}</b> → á · <b>a3</b> o <b>a${escapeHtml(sy.t3)}</b> → ǎ · <b>a4</b> o <b>a${escapeHtml(sy.t4)}</b> → à · <b>u${escapeHtml(sy.u)}</b> → ü · Tras escribir una sílaba (<b>hao3</b>) la marca va a la vocal correcta (hǎo).</div>
+  <details style="margin-top:8px"><summary class="small">⌨️ Teclado de tonos</summary><div class="chips" style="flex-wrap:wrap">${keyBtns}</div></details>
+  <details style="margin-top:6px"><summary class="small">⚙️ Configurar símbolos</summary>
+   <div class="form-grid" style="margin-top:8px">
+    <div><label class="field-label">1.º tono</label><input type="text" id="pf-t1" value="${escapeHtml(sy.t1)}" maxlength="2" onchange="saveToneSettings()"></div>
+    <div><label class="field-label">2.º tono</label><input type="text" id="pf-t2" value="${escapeHtml(sy.t2)}" maxlength="2" onchange="saveToneSettings()"></div>
+    <div><label class="field-label">3.º tono</label><input type="text" id="pf-t3" value="${escapeHtml(sy.t3)}" maxlength="2" onchange="saveToneSettings()"></div>
+    <div><label class="field-label">4.º tono</label><input type="text" id="pf-t4" value="${escapeHtml(sy.t4)}" maxlength="2" onchange="saveToneSettings()"></div>
+    <div class="full"><label class="field-label">Para la ü (u + símbolo)</label><input type="text" id="pf-u" value="${escapeHtml(sy.u)}" maxlength="2" onchange="saveToneSettings()"></div>
+   </div>
+   <div class="muted small" style="margin-top:6px">Los números 1–4 funcionan siempre. 5 = tono neutro.</div>
+  </details>
+  <div class="form-grid" style="margin-top:6px">
+   <div><label class="field-label">Nivel</label><select id="pf-level">${levels.map(l=>`<option ${l===(x?.level||"HSK1")?"selected":""}>${l}</option>`).join("")}</select></div>
+   <div><label class="field-label">Parte</label><select id="pf-part">${[1,2,3,4].map(p=>`<option ${p===Number(x?.part||1)?"selected":""}>${p}</option>`).join("")}</select></div>
+   <div class="full"><label class="field-label">Etiquetas (separadas por comas)</label><input type="text" id="pf-tags" value="${escapeHtml((x?.tags||[]).join(", "))}" autocomplete="off"></div>
+  </div>
+  <div class="actions" style="margin-top:14px"><button class="btn primary" onclick="savePhraseForm()">Guardar</button><button class="btn" onclick="closePhraseForm()">Cancelar</button></div>
+ </div>`;
+ document.body.appendChild(m);
+ setTimeout(()=>document.getElementById("pf-es")?.focus(),50);
 }
-function addPhrase(){
- const f=askPhraseFields(null); if(!f)return;
- data.push(migratePhrase({id:Date.now(),...f,pronunciationStars:1,translationStars:1}));
- save(); renderLibrary();
+function saveToneSettings(){
+ const g=id=>document.getElementById(id)?.value.trim();
+ saveToneSymbols({t1:g("pf-t1")||TONE_DEFAULTS.t1,t2:g("pf-t2")||TONE_DEFAULTS.t2,t3:g("pf-t3")||TONE_DEFAULTS.t3,t4:g("pf-t4")||TONE_DEFAULTS.t4,u:g("pf-u")||TONE_DEFAULTS.u});
 }
-function editPhrase(id){
- const x=data.find(a=>String(a.id)===String(id)); if(!x)return;
- const f=askPhraseFields(x); if(!f)return;
- Object.assign(x,f); save(); renderCurrent();
+function savePhraseForm(){
+ const g=id=>(document.getElementById(id)?.value||"").trim();
+ const es=g("pf-es"),zh=g("pf-zh");
+ if(!es||!zh){alert("Faltan el español y/o el hanzi.");return}
+ const f={es,zh,pinyin:numberedToMarked(convertPinyinLive(g("pf-py"))),level:g("pf-level")||"HSK1",part:Math.min(4,Math.max(1,Number(g("pf-part"))||1)),tags:g("pf-tags").split(",").map(t=>t.trim()).filter(Boolean)};
+ if(phraseFormId==null)data.push(migratePhrase({id:Date.now(),...f,pronunciationStars:1,translationStars:1}));
+ else{const x=data.find(a=>String(a.id)===String(phraseFormId));if(x)Object.assign(x,f)}
+ save(); closePhraseForm(); renderCurrent();
 }
 function deletePhrase(id){
  if(!confirm("¿Eliminar esta frase?"))return;
