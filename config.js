@@ -3,6 +3,6 @@
 // La anon key es pública por diseño: la seguridad la da el RLS del SQL.
 // NUNCA pongas aquí la service_role key.
 window.APP_CONFIG = {
-  supabaseUrl: "https://TU-PROYECTO.supabase.co",
+  supabaseUrl: "https://pqendrhuihjhqoqpiujm.supabase.co",
   supabaseAnonKey: "PEGA-AQUI-TU-ANON-KEY"
 };
