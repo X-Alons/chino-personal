@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#9f1239">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css">
+  <title>Chino personal · v1.0</title>
+</head>
+<body>
+<header class="topbar">
+  <div>
+    <h1>🇨🇳 Chino personal</h1>
+    <div class="muted small">Hanzi, pinyin y español · <b>v1.0</b></div>
+  </div>
+  <div class="actions"><button class="icon-btn" onclick="togglePinyin()" title="Mostrar / ocultar pinyin">拼</button><button class="icon-btn" onclick="goHome()" title="Inicio">⌂</button></div>
+</header>
+
+<nav class="nav">
+  <button class="navbtn active" id="navHome" onclick="goHome()">🏠 Niveles</button>
+  <button class="navbtn" id="navStatistics" onclick="statistics()">📊 Estadísticas</button>
+  <button class="navbtn" id="navLibrary" onclick="library()">📚 Biblioteca</button>
+  <button class="navbtn" id="navSync" onclick="openSync()">☁️ Sincronizar</button>
+</nav>
+
+<main id="main"></main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+</script>
+</body>
+</html>
