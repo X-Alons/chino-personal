@@ -10,7 +10,7 @@ const SYNC_CONFIG_KEY="chino-personal-sync-config";
 const SYNC_STATE_KEY="chino-personal-sync-state";
 const SYNC_DEVICE_KEY="chino-personal-sync-device-id";
 const TODAY_EVENTS_KEY="chino-today-events";
-const APP_VERSION="v1.1";
+const APP_VERSION="v1.2";
 let syncConfig=null;
 let syncClient=null;
 let syncUser=null;
@@ -73,6 +73,10 @@ function convertPinyinLive(text){
   const r=placeTone(low,t); if(!r)return m;
   return syl[0]!==low[0]?r[0].toUpperCase()+r.slice(1):r;
  });
+}
+function toneHint(){
+ const y=getToneSymbols(),e=escapeHtml;
+ return `Pinyin con atajos: a1/a${e(y.t1)} ā · a2/a${e(y.t2)} á · a3/a${e(y.t3)} ǎ · a4/a${e(y.t4)} à · u${e(y.u)} ü (o hao3 → hǎo).`;
 }
 function pinyinLiveInput(el){
  const pos=el.selectionStart??el.value.length;
@@ -995,7 +999,7 @@ function renderSession(){
  if(!arr.length)return openLevel(currentLevel);
  const typeLabel=sessionType==="translation"?"✍️ Traducción":"🎧 Escucha y repite";
  const intro=sessionType==="translation"
-   ?"Todas las frases de esta sesión están en la misma pantalla. Escribe las traducciones y compruébalas individualmente."
+   ?"Todas las frases de esta sesión están en la misma pantalla. Escribe las traducciones y compruébalas individualmente. "+toneHint()
    :"Todas las frases de esta sesión están en la misma pantalla. Escucha cada frase y valórate individualmente.";
  document.getElementById("main").innerHTML=`
   <div class="sessionbar session-all-header">
@@ -1006,7 +1010,7 @@ function renderSession(){
  ${currentLevel
    ? `${currentLevel}${currentPart!==null?` · Parte ${currentPart}`:""}`
    : "Repaso general"
- } · ${arr.length} frases · v1.1
+ } · ${arr.length} frases · v1.2
 </div>   </div>
   </div>
   <div class="card study-intro">
@@ -1048,7 +1052,7 @@ function sessionPhraseCard(x,num){
       ${stars(x.translationStars,x.id,"translation")}
     </div>
    </div>
-   <input class="answer" id="answer-${x.id}" placeholder="Escribe en hanzi o en pinyin (ni3 hao3)…" autocomplete="off" onkeydown="if(event.key==='Enter')checkAllAnswer(${JSON.stringify(x.id)})">
+   <input class="answer" id="answer-${x.id}" placeholder="Hanzi o pinyin (ni3 · ni^ · nu:3)…" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="if(!event.isComposing)pinyinLiveInput(this)" onkeydown="if(event.key==='Enter')checkAllAnswer(${JSON.stringify(x.id)})">
    <div class="actions">
     <button class="btn primary" onclick="checkAllAnswer(${JSON.stringify(x.id)})">Comprobar</button>
     <button class="btn" data-speak-id='${escapeHtml(String(x.id))}'>🔊 Escuchar</button>
